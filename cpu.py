@@ -39,6 +39,7 @@ class CPU:
         self.CALL = 0b1010000
         self.RET = 0b00010001
         self.ADD = 0b10100000
+        self.CMP = 0b10100111
 
         # Turning the branch table into a dictionary to be able to update easier
         self.branchtable = {
@@ -50,7 +51,8 @@ class CPU:
             self.POP: self.pop, 
             self.CALL: self.call,
             self.RET: self.ret,
-            self.ADD: self.addition          
+            self.ADD: self.addition,
+            self.CMP: self.compare                     
         }
 
     def load(self, program_filename):
@@ -73,9 +75,8 @@ class CPU:
 
                 address += 1  # add one and goes to the next
 
-        # MAR contains the address that is being read or written to.
+    # MAR contains the address that is being read or written to.
     #ram_read() should accept the address (MAR) to read and return the value stored #there.
-
     def ram_read(self, MAR):
         return self.ram[MAR]
 
@@ -83,7 +84,6 @@ class CPU:
     # ram_write() should accept a value(MDR) to write, and the address (MAR) to write it to.
     def ram_write(self, MDR, MAR):
         self.ram[MAR] = MDR
-
 
     # Branch Table
 
@@ -166,7 +166,12 @@ class CPU:
 
         # set the pc so it know where to return to 
         self.pc = return_address
-    
+
+    def compare(self):
+        num_reg_a = self.ram_read(self.pc + 1)
+        num_reg_b = self.ram_read(self.pc + 2)
+        self.alu("MULT", num_reg_a, num_reg_b)
+        self.pc += 3    
 
     def halt(self):
         self.running = False
@@ -183,6 +188,19 @@ class CPU:
             self.reg[reg_a] *= self.reg[reg_b]
         elif op == "DIV":
             self.reg[reg_a] /= self.reg[reg_b]
+        elif op == "CMP": #Compare
+            # if reg a is less than reg b <
+            if self.reg[reg_a] < self.reg[reg_b]:
+                self.flag = 0b00000100
+            # if reg a is greater than reg b >
+            elif self.reg[reg_a] > self.reg[reg_b]:
+                self.flag = 0b00000010
+            # if reg a is equal than reg b ==
+            elif self.reg[reg_a] == self.reg[reg_b]:
+                self.flag = 0b00000001
+            # set flag back to zero
+            else: 
+                self.flag = 0b00000000            
         else:
             raise Exception("Unsupported ALU operation")
 
@@ -209,21 +227,18 @@ class CPU:
 
     def run(self):
         """Run the CPU."""
-        # self.trace()
-        # print('-----------------')
 
-        # Program counter, the index (address) of the current instruction
-        # Reads the memory address that's stored in register
-        # PC = self.pc
-        # print(f'Run: pc', PC)
-
-        # print('-----------------')
-        # Figures out the instruction length to make the while loop more readable
-        #instruction_length = ???
         while self.running:
 
             # Stores the result in "Instruction Register" from the memory (RAM) address from the program
             IR = self.ram_read(self.pc)
+
+            # register_a = self.ram_read(self.pc + 1)
+            # register_b = self.ram_read(self.pc + 2)
+
+            # Checks alu to check if 1 or 0, bit shifts left 6 places
+            use_alu = (IR & 0b00100000) >> 5
+            # if the alu is used
 
             if self.branchtable.get(IR):
                 self.trace()
@@ -233,3 +248,4 @@ class CPU:
                 self.trace("End")
                 self.running = False
 
+CPU()
