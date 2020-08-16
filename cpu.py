@@ -28,6 +28,8 @@ class CPU:
         self.SP = 7 # R7 is reserved
         self.reg[self.SP] = 0xF4
         self.running = True
+
+        self.flag = 0
  
         # Instructions
         self.LDI =  0b10000010
@@ -40,6 +42,8 @@ class CPU:
         self.RET = 0b00010001
         self.ADD = 0b10100000
         self.CMP = 0b10100111
+        self.JMP = 0b01010100
+        self.JEQ = 0b01010101
 
         # Turning the branch table into a dictionary to be able to update easier
         self.branchtable = {
@@ -52,7 +56,9 @@ class CPU:
             self.CALL: self.call,
             self.RET: self.ret,
             self.ADD: self.addition,
-            self.CMP: self.compare                     
+            self.CMP: self.compare,
+            self.JMP: self.jump,
+            self.JEQ: self.jump_equals                     
         }
 
     def load(self, program_filename):
@@ -87,10 +93,10 @@ class CPU:
 
     # Branch Table
 
-    def ldi(self):
+    def ldi(self, operand_a=None, operand_b=None):
         # print("HI")
-        register_num = self.ram_read(self.pc + 1)  # operand_a (address)
-        value = self.ram_read(self.pc + 2)  # operand_b (value)
+        register_num = operand_a #self.ram_read(self.pc + 1)  # operand_a (address)
+        value = operand_b #self.ram_read(self.pc + 2)  # operand_b (value)
         # adds the value to the register
         self.reg[register_num] = value
         # print('-----------------')
@@ -109,19 +115,19 @@ class CPU:
         self.alu('ADD', num_reg_a, num_reg_b)
         self.pc += 3
 
-    def prn(self):
+    def prn(self, operand_a=None, operand_b=None):
         register_num = self.ram_read(self.pc + 1)  # operand_a (address)
         value = self.reg[register_num]
         # print('-----------------')
         print(value)
         self.pc += 2
 
-    def push(self):
+    def push(self, operand_a=None, operand_b=None):
         # decrement the stack pointer 
         self.reg[self.SP] -= 1
         
         #copy value from register into memory
-        register_num = self.ram[self.pc + 1]
+        register_num = operand_a #self.ram[self.pc + 1]
         value = self.reg[register_num]  # this value to push
 
         stack_position = self.reg[self.SP] # index into memory
@@ -129,7 +135,7 @@ class CPU:
         
         self.pc += 2
 
-    def pop(self):
+    def pop(self, operand_a=None, operand_b=None):
         # current stack pointer position
         stack_position = self.reg[self.SP]
 
@@ -137,14 +143,14 @@ class CPU:
         value = self.ram[stack_position]
 
         # add the value to the register
-        register_num = self.ram[self.pc + 1]
+        register_num = operand_a #self.ram[self.pc + 1]
         self.reg[register_num] = value
         # Increment the stack pointer position
         self.reg[self.SP] += 1
 
         self.pc += 2
 
-    def call(self):
+    def call(self, operand_a=None, operand_b=None):
         # Get the address after the call so know where to return 
         return_address = self.pc + 2
 
@@ -159,7 +165,7 @@ class CPU:
         # Sets the program counter to the destination address
         self.pc = destination_address
 
-    def ret(self):
+    def ret(self, operand_a=None, operand_b=None):
         # pop return address from top of the stack
         return_address = self.ram[self.reg[self.SP]]
         self.reg[self.SP] += 1
@@ -167,28 +173,39 @@ class CPU:
         # set the pc so it know where to return to 
         self.pc = return_address
 
-    def compare(self):
+    def compare(self, operand_a=None, operand_b=None):
         num_reg_a = self.ram_read(self.pc + 1)
         num_reg_b = self.ram_read(self.pc + 2)
-        self.alu("MULT", num_reg_a, num_reg_b)
-        self.pc += 3    
+        self.alu("CMP", num_reg_a, num_reg_b)
+        self.pc += 3
+    
+    def jump(self, operand_a=None, operand_b=None):
+        self.pc = self.reg[operand_a]
 
-    def halt(self):
+    def jump_equals(self, operand_a=None, operand_b=None):
+        # Jump to the address stored in given register.
+        # Set the PC to the address stored in the given register.
+        if self.flag & 0b00000001:
+            self.pc = self.reg[operand_a]
+        else: 
+            self.pc += 2
+
+    def halt(self, operand_a=None, operand_b=None):
         self.running = False
         
 
     def alu(self, op, reg_a, reg_b):
         """ALU operations."""
 
-        if op == "ADD":
+        if op == 0b10100000: #"ADD":
             self.reg[reg_a] += self.reg[reg_b]
-        elif op == "SUB": 
+        elif op == 0b10100010: #"SUB": 
             self.reg[reg_a] -= self.reg[reg_b]
-        elif op == "MULT":
+        elif op == 0b10100011: #"MULT":
             self.reg[reg_a] *= self.reg[reg_b]
-        elif op == "DIV":
+        elif op == 0b10100001: #"DIV":
             self.reg[reg_a] /= self.reg[reg_b]
-        elif op == "CMP": #Compare
+        elif op == 0b10100111: #"CMP": #Compare
             # if reg a is less than reg b <
             if self.reg[reg_a] < self.reg[reg_b]:
                 self.flag = 0b00000100
@@ -231,21 +248,27 @@ class CPU:
         while self.running:
 
             # Stores the result in "Instruction Register" from the memory (RAM) address from the program
-            IR = self.ram_read(self.pc)
+            IR = self.ram[self.pc]
 
-            # register_a = self.ram_read(self.pc + 1)
-            # register_b = self.ram_read(self.pc + 2)
+            register_a = self.ram_read(self.pc + 1)
+            register_b = self.ram_read(self.pc + 2)
 
             # Checks alu to check if 1 or 0, bit shifts left 6 places
             use_alu = (IR & 0b00100000) >> 5
-            # if the alu is used
 
-            if self.branchtable.get(IR):
+            # if the alu is used
+            if use_alu:
+                self.alu(IR, register_a, register_b)
+                self.pc += 3
                 self.trace()
-                self.branchtable[IR]()
+
+            # as the branchtable moves down the branchtable object, it will "get" the instruction key,
+            # then move to the specified function to be run
+            elif self.branchtable.get(IR):
+                self.trace()
+                self.branchtable[IR](register_a, register_b)
             else:
                 print('Unknown instruction')
                 self.trace("End")
                 self.running = False
 
-CPU()
